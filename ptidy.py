@@ -1,30 +1,28 @@
 #!/usr/bin/python
-#v.02
+#v.03
 #status - alpha
 import os, getopt, sys, shutil, yaml
 from datetime import datetime
 
 def usage():
 	print('usage:'
-	,"- first time, you 'store' 'main_dir' in 'meta.yaml' in order to be used every next time"
+	,"- first time, you '--store' '--main-dir' in 'meta.yaml' in order to be used every next time"
 	,'\tptidy.py -smc:\\scripts\\forweb -pproject1' 
+	,'or longopts:' 
+	,'\tptidy.py --store --main-dir=c:\\scripts\\forweb --proj-dir=project1'
 	,'- next time'
 	,'\tptidy.py -pproject1'
-	,"- or you just want to use another main_dir for the moment"
+	,"- or you just want to use another --main-dir for the moment"
 	,'\tptidy.py -mc:\\scripts\\console -pproject2'
 	,sep='\n')
 
-
-def main():
+def get_fullpath(meta):
 	store = False
-	meta = 'meta.yaml'
-	# hardcoded
-	proj_file = 'project.yaml'
 	main_dir = ''
-	proj_dir =''
+	proj_dir = ''
 	fullpath = ''
 	try:
-		opts, args = getopt.getopt(sys.argv[1:],'m:p:sh',['main_dir=','proj_dir','store','help'])
+		opts, args = getopt.getopt(sys.argv[1:],'m:p:sh',['main-dir=','proj-dir=','store','help'])
 	except getopt.GetoptError as err:
 		print(err)
 		usage()
@@ -33,11 +31,12 @@ def main():
 	for o, a in opts:
 		if o in ('-h', '--help'):
 			usage()
+			sys.exit(0)
 		elif o in ('-s', '--store'):
 			store = True
-		elif o in ('-m', '--main_dir'):
+		elif o in ('-m', '--main-dir'):
 			if not os.path.isdir(a):
-				print('You didn\'t provide valid path in --main_dir parameter')
+				print('You didn\'t provide valid path in --main-dir parameter')
 				sys.exit(2)
 			else:
 				main_dir = a
@@ -59,22 +58,29 @@ def main():
 		main_dir = yobj['main_dir']	
 		#just in case
 		if not os.path.isdir(main_dir):
-			print("--main_dir parameter in 'meta.yaml' is not valid path")
+			print("--main-dir parameter in 'meta.yaml' is not valid path")
 			sys.exit(2)		
 	else:
-		print("You didn't specify --main_dir prameter nor 'meta.yaml' config file exists")
+		print("You didn't specify --main-dir prameter nor 'meta.yaml' config file exists")
 		sys.exit(2)
 		
 	if not proj_dir:
-		print("You must specify --proj_dir parameter ie project folder")
+		print("You must specify --proj-dir parameter ie project folder")
 		sys.exit(2)
 	
 	fullpath = os.path.join(main_dir, proj_dir)
 	if not os.path.isdir(fullpath):
 		print("Project directory you provided: '" + fullpath + "' doesn't exist")
 		sys.exit(2)
-	#debug
-	print(fullpath)
+	
+	return fullpath
+
+def main():
+	# hardcoded
+	meta = 'meta.yaml'
+	proj_file = 'project.yaml'
+	
+	fullpath = get_fullpath(meta)
 	
 	os.chdir(fullpath)
 	paths = os.listdir('./')
@@ -107,7 +113,7 @@ def main():
 		os.mkdir(tmpdir)
 		
 	for f in fdiff:
-		shutil.move(f, tmpdir + '/' + f) 
+		shutil.move(f, os.path.join(tmpdir, f)) 
 			
 	print('\n'.join(fdiff))
 	print('----\n')
