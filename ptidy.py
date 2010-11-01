@@ -1,7 +1,7 @@
 #!/usr/bin/python
-#v.03
+#v.04
 #status - alpha
-import os, getopt, sys, shutil, yaml
+import os, getopt, sys, shutil, yaml, re
 from datetime import datetime
 
 def usage():
@@ -74,6 +74,14 @@ def get_fullpath(meta):
 		sys.exit(2)
 	
 	return fullpath
+	
+def failsafe_makedirs(dir):
+	try: 
+		os.makedirs(dir)
+	except: 
+		return False
+	else: 
+		return True
 
 def main():
 	# hardcoded
@@ -83,11 +91,16 @@ def main():
 	fullpath = get_fullpath(meta)
 	
 	os.chdir(fullpath)
-	paths = os.listdir('./')
 	files = []
-	for p in paths:
-		if os.path.isfile(p):
-			files.append(p)
+	p = re.compile('^\.\/')		
+	for root, dirs, fns in os.walk('./'):
+		for f in fns:
+			root = p.sub('', root) 
+			if root:
+				files.append(root + '/' + f)
+			else:
+				files.append(f)
+	print(files)	
 
 	yfile = open(os.path.join(fullpath, proj_file), 'r')
 	yobj = yaml.load(yfile)
@@ -113,6 +126,13 @@ def main():
 		os.mkdir(tmpdir)
 		
 	for f in fdiff:
+		if len(f.split('/'))>1:
+			sp = os.path.split(f)[0]
+			mkpath = os.path.join(tmpdir, sp)
+			if not os.path.isdir(mkpath):
+				if not failsafe_makedirs(mkpath):
+					print("can't create dir", mkpath)
+					sys.exit(1)
 		shutil.move(f, os.path.join(tmpdir, f)) 
 			
 	print('\n'.join(fdiff))
