@@ -1,7 +1,29 @@
 #!/usr/bin/python
-#v.06
-#status - alpha
-import os, getopt, sys, shutil, yaml, re
+# v.07 
+# status - alpha
+# last changes: if 'project.yaml' contains 'ignore' and 'units' arrays then they'll be used, e.g.
+'''
+#general 
+ignore:
+  - .cache
+units:
+ -
+ #a
+  name: upload an image to the server
+  description: it's a cgi-bin perl script that allows you to upload an image to the server
+  files:
+   - &a1 uploader.pl
+   - &a2 upload2.pl
+   - &a3 config/config.pl
+   - &a4 views/_template.html
+   - &a5 views/test/test.txt
+  main:
+   *a1: [*a3, *a4]
+  components:
+   *a4: [*a2:[*a3]]
+'''
+
+import os, getopt, sys, shutil, yaml, re, copy
 from datetime import datetime
 
 def usage():
@@ -123,14 +145,26 @@ def main():
 				substitute every two backslashes with one slash
 				'''
 				root = p.sub('/',root)
-				print('root:', root)
+				#print('root:', root)
 				for f in fns:
 					files.append(root + '/' + f)
 						
 	yfile = open(os.path.join(fullpath, proj_file), 'r')
 	yobj = yaml.load(yfile)
 	yfiles = [proj_file]
-	for o in yobj:
+	
+	if 'ignore' in yobj:
+		not_found = copy.copy(files)
+		for file in files:
+			for s_find in yobj['ignore']:
+				# not found
+				if file.find(s_find, -len(s_find)) != -1:
+					not_found.remove(file)
+		files = not_found
+					
+					
+	units = yobj['units'] if 'units' in yobj else yobj
+	for o in units:
 		yfiles[len(yfiles):] += o['files']
 
 	fdiff = []
