@@ -1,19 +1,43 @@
 #!/usr/bin/python
-#v.06
-#status - alpha
-import os, getopt, sys, shutil, yaml, re
+# v.07 
+# status - alpha
+# last changes: if 'project.yaml' contains 'ignore' and 'units' arrays then they'll be used, e.g.
+'''
+#general 
+ignore:
+ - .cache
+units:
+ -
+ #a
+  name: upload an image to the server
+  description: it's a cgi-bin perl script that allows you to upload an image to the server
+  files:
+   - &a1 uploader.pl
+   - &a2 upload2.pl
+   - &a3 config/config.pl
+   - &a4 views/_template.html
+   - &a5 views/test/test.txt
+  main:
+   *a1: [*a3, *a4]
+  components:
+   *a4: [*a2:[*a3]]
+'''
+
+import os, getopt, sys, shutil, yaml, re, copy
 from datetime import datetime
 
 def usage():
 	print('usage:'
-	,"- first time, you '--store' '--main-dir' in 'meta.yaml' in order to be used every next time"
+	,"- first time, you '--store' '--main-dir' in 'meta.yaml' in order to be used every next time:"
 	,'\tptidy.py -smc:\\scripts\\forweb -pproject1' 
 	,'or longopts:' 
 	,'\tptidy.py --store --main-dir=c:\\scripts\\forweb --proj-dir=project1'
 	,'- next time'
 	,'\tptidy.py -pproject1'
-	,"- or you just want to use another --main-dir for the moment"
+	,"- or you just want to use another --main-dir for the moment:"
 	,'\tptidy.py -mc:\\scripts\\console -pproject2'
+	,"- or in order to display '--main-dir' parameter stored in 'meta.yaml':"
+	,'\tpidy.py -v'
 	,sep='\n')
 
 def get_fullpath(meta):
@@ -27,7 +51,10 @@ def get_fullpath(meta):
 		print(err)
 		usage()
 		sys.exit(2)
-		
+	
+	if not opts:
+		opts.append(('-h',''))
+	
 	for o, a in opts:
 		if o in ('-h', '--help'):
 			usage()
@@ -64,7 +91,7 @@ def get_fullpath(meta):
 		inpt = open(meta, 'r')
 		yobj = yaml.load(inpt)
 		if not 'main_dir' in yobj:
-			print("There is no 'main_dir' parameter in 'meta.yaml'")
+			print("There is no '--main-dir' parameter in 'meta.yaml'")
 			sys.exit(2)
 		main_dir = yobj['main_dir']	
 		#just in case
@@ -118,14 +145,26 @@ def main():
 				substitute every two backslashes with one slash
 				'''
 				root = p.sub('/',root)
-				print('root:', root)
+				#print('root:', root)
 				for f in fns:
 					files.append(root + '/' + f)
 						
 	yfile = open(os.path.join(fullpath, proj_file), 'r')
 	yobj = yaml.load(yfile)
 	yfiles = [proj_file]
-	for o in yobj:
+	
+	if 'ignore' in yobj:
+		not_found = copy.copy(files)
+		for file in files:
+			for s_find in yobj['ignore']:
+				# not found
+				if file.find(s_find, -len(s_find)) != -1:
+					not_found.remove(file)
+		files = not_found
+					
+					
+	units = yobj['units'] if 'units' in yobj else yobj
+	for o in units:
 		yfiles[len(yfiles):] += o['files']
 
 	fdiff = []
