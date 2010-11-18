@@ -1,11 +1,22 @@
 #!/usr/bin/python
-# v.07 
-# status - alpha
-# last changes: if 'project.yaml' contains 'ignore' and 'units' arrays then they'll be used, e.g.
-'''
+''''
+ status - alpha
+ v.08
+ last changes: thanks to ['ignore']['files'] and ['ignore']['dirs'] arrays in 'project.yaml'
+ you can skip particular files and files in sub-directories in your disk project folder 
+ you don't want these files to be compared  against those ones stored in 'project.yaml'
+ v.07 
+ last changes: if 'project.yaml' contains 'ignore' and 'units' arrays then they'll be used, e.g.
+
+project.yaml example:
+---
 #general 
 ignore:
-  - .cache
+ files:
+ - .cache
+ dirs:
+ - .git
+ 
 units:
  -
  #a
@@ -113,6 +124,72 @@ def get_fullpath(meta):
 	
 	return fullpath
 	
+def file2re(path):
+	begin_dot = re.compile('^\.')
+	if begin_dot.match(path):
+		path = begin_dot.sub('.+?\.', path)
+	else:
+		dot = re.compile('\.')
+		path = dot.sub('\.', path)
+	
+	slash = re.compile('\/')
+	path = slash.sub('\/', path)
+	print(path)
+	return path
+	
+def dir2re(path):
+	def repl(m):
+		if  m.group(0) == '':
+			return '\.\/'
+		else:
+			return m.group(0)
+		
+	begin_dot = re.compile('^\.\/(.*)')
+	path = re.sub('^\.\/(.*)', repl, path)
+	
+	dot = re.compile('\.')
+	path = dot.sub('\.', path)
+	
+	slash = re.compile('\/')
+	path = slash.sub('\/', path)
+	print(path)
+	return path
+	
+	
+def my_walk(path, skip_files, skip_dirs):	
+	files = []
+	start_path_re = re.compile('^' + dir2re(path))
+	backsl_re = re.compile('\\\\')
+	
+	skip_files_re = ''
+	
+	if type(skip_files).__name__ == 'list' and len(skip_files)>0:
+		for index, item in enumerate(skip_files):
+			skip_files[index] = file2re(item)
+		pat = '(?:' + '|'.join(skip_files) + ')' + '\Z'
+		print(pat)
+		skip_files_re = re.compile(pat)
+	
+	skip_dirs_re = ''
+	if type(skip_dirs).__name__ == 'list' and len(skip_dirs)>0:
+		for index, item in enumerate(skip_dirs):
+			skip_dirs[index] = dir2re(item)
+		pat = '^' + dir2re(path) + '(?:' + '|'.join(skip_dirs) + ')'
+		print(pat)
+		skip_dirs_re = re.compile(pat)
+	
+	def process_walk(path, skip_files_re, skip_dirs_re):
+		for item in os.listdir(path):
+			# combined path
+			p = os.path.join(path, item)
+			if os.path.isfile(p) and (not skip_files_re or not skip_files_re.match(item)):
+				files.append(backsl_re.sub('/', start_path_re.sub('', p)))
+			if os.path.isdir(p) and (not skip_dirs_re or not skip_dirs_re.match(p)):
+				process_walk(p, skip_files_re, skip_dirs_re)
+		return files
+	return process_walk(path, skip_files_re, skip_dirs_re)
+	
+	
 def failsafe_makedirs(dir):
 	try: 
 		os.makedirs(dir)
@@ -127,42 +204,23 @@ def main():
 	proj_file = 'project.yaml'
 	
 	fullpath = get_fullpath(meta)
-	
-	os.chdir(fullpath)
-	files = []
-	'''
-	we skip here 'add.sh' file and '.git' directory
-	'''
-	listdir = os.listdir('./')
-	p = re.compile('\\\\')
-	for item in listdir:
-		if os.path.isfile(item) and item != 'add.sh':
-			files.append(item)
-		elif os.path.isdir(item) and item != '.git':
-			for root, dirs, fns in os.walk(item):
-				'''
-				in order to compare pathnames with those from 'project.yaml' 
-				substitute every two backslashes with one slash
-				'''
-				root = p.sub('/',root)
-				#print('root:', root)
-				for f in fns:
-					files.append(root + '/' + f)
-						
+	# 1
 	yfile = open(os.path.join(fullpath, proj_file), 'r')
 	yobj = yaml.load(yfile)
 	yfiles = [proj_file]
 	
+	skip_files = []
+	skip_dirs = []
 	if 'ignore' in yobj:
-		not_found = copy.copy(files)
-		for file in files:
-			for s_find in yobj['ignore']:
-				# not found
-				if file.find(s_find, -len(s_find)) != -1:
-					not_found.remove(file)
-		files = not_found
-					
-					
+		if 'files' in yobj['ignore']:
+			skip_files = yobj['ignore']['files']
+		if 'dirs' in yobj['ignore']:
+			skip_dirs = yobj['ignore']['dirs']	
+	
+	# 2 
+	os.chdir(fullpath)
+	files = my_walk('./', skip_files, skip_dirs)
+									
 	units = yobj['units'] if 'units' in yobj else yobj
 	for o in units:
 		yfiles[len(yfiles):] += o['files']
