@@ -1,48 +1,25 @@
 #!/usr/bin/python
 ''''
- status - alpha
- v.08
- last changes: thanks to ['ignore']['files'] and ['ignore']['dirs'] arrays in 'project.yaml'
- you can skip particular files and files in sub-directories in your disk project folder 
- you don't want these files to be compared  against those ones stored in 'project.yaml'
- v.07 
- last changes: if 'project.yaml' contains 'ignore' and 'units' arrays then they'll be used, e.g.
-
-project.yaml example:
----
-#general 
-ignore:
- files:
- - .cache
- dirs:
- - .git
- 
-units:
- -
- #a
-  name: upload an image to the server
-  description: it's a cgi-bin perl script that allows you to upload an image to the server
-  files:
-   - &a1 uploader.pl
-   - &a2 upload2.pl
-   - &a3 config/config.pl
-   - &a4 views/_template.html
-   - &a5 views/test/test.txt
-  main:
-   *a1: [*a3, *a4]
-  components:
-   *a4: [*a2:[*a3]]
+ v0.9
+ status: alpha
+ -i/--simul option was introduced, 
+ in order to work 'project.yaml' has to have 
+ ['files'], ['ignore']['files'] and ['ignore']['dirs'] data structure mappings, 
+ see 'example-project.yaml' file
 '''
 
 import os, getopt, sys, shutil, yaml, re, copy
 from datetime import datetime
 
+simul = False
+
 def usage():
 	print('usage:'
-	,"- first time, you '--store' '--main-dir' in 'meta.yaml' in order to be used every next time:"
-	,'\tptidy.py -smc:\\scripts\\forweb -pproject1' 
+	,"- first time, you '--store' '--main-dir' in 'meta.yaml' in order to be used every next time"
+	,"we use '--simul' to show what script would actually do - if no '--simul' option it will do it!!!"
+	,'\tptidy.py -smc:\\scripts\\forweb -pproject1 -i' 
 	,'or longopts:' 
-	,'\tptidy.py --store --main-dir=c:\\scripts\\forweb --proj-dir=project1'
+	,'\tptidy.py --store --main-dir=c:\\scripts\\forweb --proj-dir=project1 --simul'
 	,'- next time'
 	,'\tptidy.py -pproject1'
 	,"- or you just want to use another --main-dir for the moment:"
@@ -52,12 +29,13 @@ def usage():
 	,sep='\n')
 
 def get_fullpath(meta):
+	global simul
 	store = False
 	main_dir = ''
 	proj_dir = ''
 	fullpath = ''
 	try:
-		opts, args = getopt.getopt(sys.argv[1:],'m:p:shv',['main-dir=','proj-dir=','store','help','view'])
+		opts, args = getopt.getopt(sys.argv[1:],'m:p:shvi',['main-dir=','proj-dir=','store','help','view', 'simul'])
 	except getopt.GetoptError as err:
 		print(err)
 		usage()
@@ -70,6 +48,8 @@ def get_fullpath(meta):
 		if o in ('-h', '--help'):
 			usage()
 			sys.exit(0)
+		elif o in ('-i', '--simul'):
+			simul = True
 		elif o in ('-v', '--view'):
 			try:
 				inpt = open(meta, 'r') 
@@ -167,7 +147,7 @@ def my_walk(path, skip_files, skip_dirs):
 		for index, item in enumerate(skip_files):
 			skip_files[index] = file2re(item)
 		pat = '(?:' + '|'.join(skip_files) + ')' + '\Z'
-		print(pat)
+		#print(pat)
 		skip_files_re = re.compile(pat)
 	
 	skip_dirs_re = ''
@@ -175,7 +155,7 @@ def my_walk(path, skip_files, skip_dirs):
 		for index, item in enumerate(skip_dirs):
 			skip_dirs[index] = dir2re(item)
 		pat = '^' + dir2re(path) + '(?:' + '|'.join(skip_dirs) + ')'
-		print(pat)
+		#print(pat)
 		skip_dirs_re = re.compile(pat)
 	
 	def process_walk(path, skip_files_re, skip_dirs_re):
@@ -199,6 +179,7 @@ def failsafe_makedirs(dir):
 		return True
 
 def main():
+	global simul
 	# hardcoded
 	meta = 'meta.yaml'
 	proj_file = 'project.yaml'
@@ -207,6 +188,7 @@ def main():
 	# 1
 	yfile = open(os.path.join(fullpath, proj_file), 'r')
 	yobj = yaml.load(yfile)
+	yfile.close()
 	yfiles = [proj_file]
 	
 	skip_files = []
@@ -222,8 +204,7 @@ def main():
 	files = my_walk('./', skip_files, skip_dirs)
 									
 	units = yobj['units'] if 'units' in yobj else yobj
-	for o in units:
-		yfiles[len(yfiles):] += o['files']
+	yfiles = yobj['files']
 
 	fdiff = []
 	fsame = []
@@ -240,26 +221,37 @@ def main():
 	if len(fdiff) > 0:
 		dt = datetime.now()
 		tmpdir = dt.strftime("%Y%m%d-%H%M%S")
-		if not os.path.isdir(tmpdir):
+		if not os.path.isdir(tmpdir) and not simul:
 			os.mkdir(tmpdir)
+		else:
+			print(tmpdir, "is to be created")
 			
 		for f in fdiff:
 			if len(f.split('/'))>1:
 				sp = os.path.split(f)[0]
 				mkpath = os.path.join(tmpdir, sp)
-				if not os.path.isdir(mkpath):
-					if not failsafe_makedirs(mkpath):
-						print("can't create dir", mkpath)
-						sys.exit(1)
-			shutil.move(f, os.path.join(tmpdir, f)) 
+				if not simul:
+					if not os.path.isdir(mkpath):
+						if not failsafe_makedirs(mkpath):
+							print("can't create dir", mkpath)
+							sys.exit(1)
+				else:
+					print(mkpath, "is to be created")
+			if not simul:
+				shutil.move(f, os.path.join(tmpdir, f)) 
+			else:
+				print(os.path.join(tmpdir, f), "is to be moved")
 			
 		print("NOT IN 'project.yaml':\n", '\n'.join(fdiff), sep='')
 		print('----')
 		
 	print("IN 'project.yaml':\n", '\n'.join(fsame), sep='')
 	
-	shfile = open("add.sh", 'w+')
-	print("git add", " ".join(fsame), file=shfile)
+	if not simul:
+		shfile = open("add.sh", 'w+')
+		print("git add", " ".join(fsame), file=shfile)
+	else:
+		print("'add.sh' is to be created with command in it\ngit add", " ".join(fsame))
 
 if __name__ == '__main__':
 	main()

@@ -1,0 +1,21 @@
+# the idea is to each project have in its main directory 'project.yaml' file that describes it
+# this file content is read by 'ptidy.py'
+files:
+#you can use aliases if you want use them in rest of the file
+ - &a1 index.php
+#you can put files in subdirs 
+ - &a2 css/1/style.css
+ - output.php
+ - &a3 process.php
+#if not this will be moved 
+ - project.yaml
+ignore:
+#only files in main dir eg 'out/.cache' won't work
+ files:
+ - .cache
+ - log.txt
+#only first-level subdirs eg 'logs/1' won't work
+ dirs:
+ - logs
+ - .git
+#rest of the file
